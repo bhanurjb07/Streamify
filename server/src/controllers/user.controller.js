@@ -22,8 +22,7 @@ export async function getRecommendedUsers(req, res) {
   }
 }
 
-
-///friends
+//user friends
 export async function getMyFriends(req, res) {
   try {
     const user = await User.findById(req.user.id)
