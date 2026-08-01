@@ -2,7 +2,6 @@ import { upsertStreamUser } from "../lib/stream.js";
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 
-///signup 
 export async function signup(req, res) {
   const { email, password, fullName } = req.body;
 
@@ -26,21 +25,21 @@ export async function signup(req, res) {
       return res.status(400).json({ message: "Email already exists, please use a diffrent one" });
     }
 
-    const seed = encodeURIComponent(fullName || email || Date.now().toString());
-    const defaultAvatar = `https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}`;
+    const idx = Math.floor(Math.random() * 100) + 1; // generate a num between 1-100
+    const randomAvatar = `https://avatar.iran.liara.run/public/${idx}.png`;
 
     const newUser = await User.create({
       email,
       fullName,
       password,
-      profilePic: defaultAvatar,
+      profilePic: randomAvatar,
     });
 
     try {
       await upsertStreamUser({
         id: newUser._id.toString(),
         name: newUser.fullName,
-        image: newUser.profilePic || defaultAvatar,
+        image: newUser.profilePic || "",
       });
       console.log(`Stream user created for ${newUser.fullName}`);
     } catch (error) {
@@ -53,8 +52,8 @@ export async function signup(req, res) {
 
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true, 
-      sameSite: "strict",
+      httpOnly: true, // prevent XSS attacks,
+      sameSite: "strict", // prevent CSRF attacks
       secure: process.env.NODE_ENV === "production",
     });
 
@@ -63,9 +62,8 @@ export async function signup(req, res) {
     console.log("Error in signup controller", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
-};
+}
 
-//login
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -86,8 +84,8 @@ export async function login(req, res) {
 
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true, 
-      sameSite: "strict", 
+      httpOnly: true, // prevent XSS attacks,
+      sameSite: "strict", // prevent CSRF attacks
       secure: process.env.NODE_ENV === "production",
     });
 
@@ -98,58 +96,34 @@ export async function login(req, res) {
   }
 }
 
-//logout
 export function logout(req, res) {
   res.clearCookie("jwt");
   res.status(200).json({ success: true, message: "Logout successful" });
 }
 
-//onboard
 export async function onboard(req, res) {
   try {
     const userId = req.user._id;
 
-    const {
-      fullName,
-      bio,
-      nativeLanguage,
-      learningLanguage,
-      country,
-      city = "",
-      gender = "",
-      profilePic,
-    } = req.body;
+    const { fullName, bio, nativeLanguage, learningLanguage, location } = req.body;
 
-    if (!fullName || !bio || !nativeLanguage || !learningLanguage || !country) {
+    if (!fullName || !bio || !nativeLanguage || !learningLanguage || !location) {
       return res.status(400).json({
-        message: "All required fields must be filled",
+        message: "All fields are required",
         missingFields: [
           !fullName && "fullName",
           !bio && "bio",
           !nativeLanguage && "nativeLanguage",
           !learningLanguage && "learningLanguage",
-          !country && "country",
+          !location && "location",
         ].filter(Boolean),
       });
     }
 
-    const location = city ? `${city}, ${country}` : country;
-    const finalProfilePic =
-      profilePic ||
-      `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(userId.toString())}`;
-
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
-        fullName,
-        bio,
-        nativeLanguage,
-        learningLanguage,
-        country,
-        city,
-        gender,
-        location,
-        profilePic: finalProfilePic,
+        ...req.body,
         isOnboarded: true,
       },
       { new: true }
@@ -171,75 +145,6 @@ export async function onboard(req, res) {
     res.status(200).json({ success: true, user: updatedUser });
   } catch (error) {
     console.error("Onboarding error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-
-// update profile (after onboarding)
-export async function updateProfile(req, res) {
-  try {
-    const userId = req.user._id;
-
-    const {
-      fullName,
-      bio,
-      nativeLanguage,
-      learningLanguage,
-      country,
-      city = "",
-      gender = "",
-      profilePic,
-    } = req.body;
-
-    if (!fullName || !bio || !nativeLanguage || !learningLanguage || !country) {
-      return res.status(400).json({
-        message: "All required fields must be filled",
-        missingFields: [
-          !fullName && "fullName",
-          !bio && "bio",
-          !nativeLanguage && "nativeLanguage",
-          !learningLanguage && "learningLanguage",
-          !country && "country",
-        ].filter(Boolean),
-      });
-    }
-
-    const location = city ? `${city}, ${country}` : country;
-    const finalProfilePic =
-      profilePic ||
-      `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(userId.toString())}`;
-
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        fullName,
-        bio,
-        nativeLanguage,
-        learningLanguage,
-        country,
-        city,
-        gender,
-        location,
-        profilePic: finalProfilePic,
-      },
-      { new: true }
-    ).select("-password");
-
-    if (!updatedUser) return res.status(404).json({ message: "User not found" });
-
-    try {
-      await upsertStreamUser({
-        id: updatedUser._id.toString(),
-        name: updatedUser.fullName,
-        image: updatedUser.profilePic || "",
-      });
-    } catch (streamError) {
-      console.log("Error updating Stream user during profile update:", streamError.message);
-    }
-
-    res.status(200).json({ success: true, user: updatedUser });
-  } catch (error) {
-    console.error("Update profile error:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }

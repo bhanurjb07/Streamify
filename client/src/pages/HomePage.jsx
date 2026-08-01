@@ -114,12 +114,10 @@ const HomePage = () => {
 
                         <div>
                           <h3 className="font-semibold text-lg">{user.fullName}</h3>
-                          {(user.city || user.country || user.location) && (
+                          {user.location && (
                             <div className="flex items-center text-xs opacity-70 mt-1">
                               <MapPinIcon className="size-3 mr-1" />
-                              {user.city && user.country
-                                ? `${user.city}, ${user.country}`
-                                : user.country || user.location}
+                              {user.location}
                             </div>
                           )}
                         </div>

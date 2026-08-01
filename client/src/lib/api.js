@@ -29,23 +29,8 @@ export const completeOnboarding = async (userData) => {
   return response.data;
 };
 
-export const updateProfile = async (userData) => {
-  const response = await axiosInstance.put("/auth/profile", userData);
-  return response.data;
-};
-
 export async function getUserFriends() {
   const response = await axiosInstance.get("/users/friends");
-  return response.data;
-}
-
-export async function getUserProfile(userId) {
-  const response = await axiosInstance.get(`/users/profile/${userId}`);
-  return response.data;
-}
-
-export async function removeFriend(userId) {
-  const response = await axiosInstance.delete(`/users/friends/${userId}`);
   return response.data;
 }
 
@@ -76,10 +61,5 @@ export async function acceptFriendRequest(requestId) {
 
 export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
-  return response.data;
-}
-
-export async function syncChatUsers(targetUserId) {
-  const response = await axiosInstance.post(`/chat/sync/${targetUserId}`);
   return response.data;
 }

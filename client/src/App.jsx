@@ -1,21 +1,17 @@
 import { Navigate, Route, Routes } from "react-router";
 
 import HomePage from "./pages/HomePage.jsx";
-import LandingPage from "./pages/LandingPage.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
-import FriendsPage from "./pages/FriendsPage.jsx";
 import CallPage from "./pages/CallPage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
 import OnboardingPage from "./pages/OnboardingPage.jsx";
-import EditProfilePage from "./pages/EditProfilePage.jsx";
 
 import { Toaster } from "react-hot-toast";
 
 import PageLoader from "./components/PageLoader.jsx";
 import useAuthUser from "./hooks/useAuthUser.js";
-import useStreamChatClient from "./hooks/useStreamChatClient.js";
 import Layout from "./components/Layout.jsx";
 import { useThemeStore } from "./store/useThemeStore.js";
 
@@ -25,9 +21,6 @@ const App = () => {
 
   const isAuthenticated = Boolean(authUser);
   const isOnboarded = authUser?.isOnboarded;
-
-  // Keep Stream presence alive while the user is logged in
-  useStreamChatClient();
 
   if (isLoading) return <PageLoader />;
 
@@ -41,10 +34,8 @@ const App = () => {
               <Layout showSidebar={true}>
                 <HomePage />
               </Layout>
-            ) : isAuthenticated ? (
-              <Navigate to="/onboarding" />
             ) : (
-              <LandingPage />
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )
           }
         />
@@ -61,30 +52,6 @@ const App = () => {
           }
         />
         <Route
-          path="/friends"
-          element={
-            isAuthenticated && isOnboarded ? (
-              <Layout showSidebar={true}>
-                <FriendsPage />
-              </Layout>
-            ) : (
-              <Navigate to={!isAuthenticated ? "/" : "/onboarding"} />
-            )
-          }
-        />
-        <Route
-          path="/edit-profile"
-          element={
-            isAuthenticated && isOnboarded ? (
-              <Layout showSidebar={true}>
-                <EditProfilePage />
-              </Layout>
-            ) : (
-              <Navigate to={!isAuthenticated ? "/" : "/onboarding"} />
-            )
-          }
-        />
-        <Route
           path="/notifications"
           element={
             isAuthenticated && isOnboarded ? (
@@ -92,7 +59,7 @@ const App = () => {
                 <NotificationsPage />
               </Layout>
             ) : (
-              <Navigate to={!isAuthenticated ? "/" : "/onboarding"} />
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )
           }
         />
@@ -102,7 +69,7 @@ const App = () => {
             isAuthenticated && isOnboarded ? (
               <CallPage />
             ) : (
-              <Navigate to={!isAuthenticated ? "/" : "/onboarding"} />
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )
           }
         />
@@ -115,7 +82,7 @@ const App = () => {
                 <ChatPage />
               </Layout>
             ) : (
-              <Navigate to={!isAuthenticated ? "/" : "/onboarding"} />
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
             )
           }
         />
@@ -130,7 +97,7 @@ const App = () => {
                 <Navigate to="/" />
               )
             ) : (
-              <Navigate to="/" />
+              <Navigate to="/login" />
             )
           }
         />
