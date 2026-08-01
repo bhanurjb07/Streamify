@@ -1,84 +1,78 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
-import useAuthUser from "../hooks/useAuthUser";
 import { useQuery } from "@tanstack/react-query";
-import { getStreamToken } from "../lib/api";
-
 import {
   Channel,
-  ChannelHeader,
   Chat,
   MessageComposer,
   MessageList,
   Thread,
   Window,
 } from "stream-chat-react";
-import { StreamChat } from "stream-chat";
 import toast from "react-hot-toast";
 
+import useAuthUser from "../hooks/useAuthUser";
+import useStreamChatClient from "../hooks/useStreamChatClient";
+import { getUserProfile, syncChatUsers } from "../lib/api";
 import ChatLoader from "../components/ChatLoader";
 import CallButton from "../components/CallButton";
-
-const STREAM_API_KEY = import.meta.env.VITE_STREAM_API_KEY;
+import CustomChannelHeader from "../components/CustomChannelHeader";
 
 const ChatPage = () => {
   const { id: targetUserId } = useParams();
-
-  const [chatClient, setChatClient] = useState(null);
-  const [channel, setChannel] = useState(null);
-  const [loading, setLoading] = useState(true);
-
   const { authUser } = useAuthUser();
+  const { chatClient, connecting } = useStreamChatClient();
 
-  const { data: tokenData } = useQuery({
-    queryKey: ["streamToken"],
-    queryFn: getStreamToken,
-    enabled: !!authUser, // this will run only when authUser is available
+  const [channel, setChannel] = useState(null);
+  const [loadingChannel, setLoadingChannel] = useState(true);
+
+  const { data: otherUser } = useQuery({
+    queryKey: ["userProfile", targetUserId],
+    queryFn: () => getUserProfile(targetUserId),
+    enabled: Boolean(targetUserId),
   });
 
   useEffect(() => {
-    const initChat = async () => {
-      if (!tokenData?.token || !authUser) return;
+    const initChannel = async () => {
+      if (!chatClient || !authUser || !targetUserId || !otherUser) return;
 
       try {
-        console.log("Initializing stream chat client...");
+        setLoadingChannel(true);
 
-        const client = StreamChat.getInstance(STREAM_API_KEY);
+        // Sync both users' avatars/names into Stream (server-side)
+        await syncChatUsers(targetUserId);
 
-        await client.connectUser(
-          {
-            id: authUser._id,
-            name: authUser.fullName,
-            image: authUser.profilePic,
-          },
-          tokenData.token
-        );
+        // Disable slash commands in composer
+        chatClient.setMessageComposerSetupFunction?.(({ composer }) => {
+          try {
+            composer.textComposer.middlewareExecutor.remove([
+              "stream-io/text-composer/commands",
+              "stream-io/text-composer/commands-middleware",
+            ]);
+          } catch {
+            // middleware ids can vary by SDK version
+          }
+        });
 
-        //
         const channelId = [authUser._id, targetUserId].sort().join("-");
-
-        // you and me
-        // if i start the chat => channelId: [myId, yourId]
-        // if you start the chat => channelId: [yourId, myId]  => [myId,yourId]
-
-        const currChannel = client.channel("messaging", channelId, {
+        const currChannel = chatClient.channel("messaging", channelId, {
           members: [authUser._id, targetUserId],
         });
 
-        await currChannel.watch();
+        await currChannel.watch({ presence: true, state: true, watch: true });
 
-        setChatClient(client);
         setChannel(currChannel);
       } catch (error) {
         console.error("Error initializing chat:", error);
         toast.error("Could not connect to chat. Please try again.");
+        setChannel(null);
       } finally {
-        setLoading(false);
+        setLoadingChannel(false);
       }
     };
 
-    initChat();
-  }, [tokenData, authUser, targetUserId]);
+    initChannel();
+  }, [chatClient, authUser, targetUserId, otherUser]);
 
   const handleVideoCall = () => {
     if (channel) {
@@ -92,7 +86,9 @@ const ChatPage = () => {
     }
   };
 
-  if (loading || !chatClient || !channel) return <ChatLoader />;
+  if (connecting || loadingChannel || !chatClient || !channel || !otherUser) {
+    return <ChatLoader />;
+  }
 
   return (
     <div className="h-[93vh]">
@@ -101,7 +97,7 @@ const ChatPage = () => {
           <div className="w-full relative">
             <CallButton handleVideoCall={handleVideoCall} />
             <Window>
-              <ChannelHeader />
+              <CustomChannelHeader otherUser={otherUser} />
               <MessageList />
               <MessageComposer focus />
             </Window>
@@ -112,4 +108,5 @@ const ChatPage = () => {
     </div>
   );
 };
+
 export default ChatPage;
