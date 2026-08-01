@@ -47,7 +47,10 @@ const LoginPage = () => {
           {/* ERROR MESSAGE DISPLAY */}
           {error && (
             <div className="alert alert-error mb-4">
-              <span>{error.response.data.message}</span>
+              <span>
+                {error.response?.data?.message ||
+                  "Something went wrong. Make sure the server is running on port 4000."}
+              </span>
             </div>
           )}
 

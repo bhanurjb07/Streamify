@@ -1,43 +1,25 @@
-import express from "express";
-import "dotenv/config";
-import cookieParser from "cookie-parser";
-import cors from "cors";
-import path from "path";
+import http from "http";
 
-import authRoutes from "./routes/auth.route.js";
-import userRoutes from "./routes/user.route.js";
-import chatRoutes from "./routes/chat.route.js";
+import app from "./app.js";
+import { connectDB } from "./config/db.js";
+import { env } from "./config/env.js";
+import { initSocket } from "./lib/socket.js";
+import logger from "./utils/logger.js";
 
-import { connectDB } from "./lib/db.js";
+const httpServer = http.createServer(app);
 
-const app = express();
-const PORT = process.env.PORT;
+initSocket(httpServer);
 
-const __dirname = path.resolve();
+httpServer.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    logger.error(`Port ${env.port} is already in use. Stop the other server and try again.`);
+  } else {
+    logger.error("Server failed to start", { message: error.message });
+  }
+  process.exit(1);
+});
 
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true, // allow frontend to send cookies
-  })
-);
-
-app.use(express.json());
-app.use(cookieParser());
-
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/chat", chatRoutes);
-
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
-  });
-}
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+httpServer.listen(env.port, () => {
+  logger.success(`Server is running on port ${env.port}`);
   connectDB();
 });

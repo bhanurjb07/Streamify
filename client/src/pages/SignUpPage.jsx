@@ -49,7 +49,10 @@ const SignUpPage = () => {
           {/* ERROR MESSAGE IF ANY */}
           {error && (
             <div className="alert alert-error mb-4">
-              <span>{error.response.data.message}</span>
+              <span>
+                {error.response?.data?.message ||
+                  "Something went wrong. Make sure the server is running on port 4000."}
+              </span>
             </div>
           )}
 
@@ -122,7 +125,7 @@ const SignUpPage = () => {
                   </div>
                 </div>
 
-                <button className="btn btn-primary w-full" type="submit">
+                <button className="btn btn-primary w-full" type="submit" disabled={isPending}>
                   {isPending ? (
                     <>
                       <span className="loading loading-spinner loading-xs"></span>

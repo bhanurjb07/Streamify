@@ -1,12 +1,22 @@
-import { generateStreamToken } from "../lib/stream.js";
-
-export async function getStreamToken(req, res) {
+import Message from "../models/Message.js";
+import logger from "../utils/logger.js";
+export async function getMessages(req, res) {
   try {
-    const token = generateStreamToken(req.user.id);
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
 
-    res.status(200).json({ token });
+    const messages = await Message.find({
+      $or: [
+        { sender: currentUserId, recipient: userId },
+        { sender: userId, recipient: currentUserId },
+      ],
+    })
+      .sort({ createdAt: 1 })
+      .populate("sender", "fullName profilePic");
+
+    res.status(200).json(messages);
   } catch (error) {
-    console.log("Error in getStreamToken controller:", error.message);
+    logger.error("Error in getMessages controller", { message: error.message });
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
