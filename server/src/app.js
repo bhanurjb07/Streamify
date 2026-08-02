@@ -1,32 +1,49 @@
-import express from "express";
-import cookieParser from "cookie-parser";
-import cors from "cors";
-import path from "path";
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const { Server } = require("socket.io");
+const { CLIENT_URL } = require("./config/constants");
+const registerMatchmaking = require("./socketHandlers/matchmaking");
+const registerChat = require("./socketHandlers/chat");
+const registerFileTransfer = require("./socketHandlers/fileTransfer");
+const registerWebRTCSignaling = require("./socketHandlers/webrtcSignaling");
 
-import authRoutes from "./routes/auth.route.js";
-import userRoutes from "./routes/user.route.js";
-import chatRoutes from "./routes/chat.route.js";
-import { env } from "./config/env.js";
-import { corsOptions } from "./config/cors.js";
-
-const app = express();
-const __dirname = path.resolve();
-
-app.use(cors(corsOptions));
-
-app.use(express.json());
-app.use(cookieParser());
-
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/chat", chatRoutes);
-
-if (env.nodeEnv === "production") {
-  app.use(express.static(path.join(__dirname, "../client/dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+function createApp() {
+  const app = express();
+  app.use(cors({ origin: CLIENT_URL, credentials: true }));
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
   });
+  return app;
 }
 
-export default app;
+function createServer() {
+  const app = createApp();
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: {
+      origin: CLIENT_URL,
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
+
+  const state = {
+    waitingQueue: [],
+    users: new Map(),
+    rooms: new Map(),
+  };
+
+  io.on("connection", (socket) => {
+    console.log(`Client connected: ${socket.id}`);
+
+    registerMatchmaking(io, socket, state);
+    registerChat(io, socket, state);
+    registerFileTransfer(io, socket, state);
+    registerWebRTCSignaling(io, socket, state);
+  });
+
+  return server;
+}
+
+module.exports = { createApp, createServer };

@@ -1,98 +1,183 @@
-import { Navigate, Route, Routes } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
+import EntryForm from "./components/EntryForm";
+import WaitingScreen from "./components/WaitingScreen";
+import ChatRoom from "./components/ChatRoom";
+import { SERVER_URL } from "./config/constants";
 
-import HomePage from "./pages/HomePage.jsx";
-import SignUpPage from "./pages/SignUpPage.jsx";
-import LoginPage from "./pages/LoginPage.jsx";
-import NotificationsPage from "./pages/NotificationsPage.jsx";
-import ChatPage from "./pages/ChatPage.jsx";
-import OnboardingPage from "./pages/OnboardingPage.jsx";
+const VIEWS = {
+  ENTRY: "entry",
+  WAITING: "waiting",
+  CHAT: "chat",
+};
 
-import { Toaster } from "react-hot-toast";
+export default function App() {
+  const [view, setView] = useState(VIEWS.ENTRY);
+  const [partner, setPartner] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusBanner, setStatusBanner] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
 
-import PageLoader from "./components/PageLoader.jsx";
-import useAuthUser from "./hooks/useAuthUser.js";
-import Layout from "./components/Layout.jsx";
-import { useThemeStore } from "./store/useThemeStore.js";
+  const socketRef = useRef(null);
 
-const App = () => {
-  const { isLoading, authUser } = useAuthUser();
-  const { theme } = useThemeStore();
+  const initSocket = useCallback(() => {
+    if (socketRef.current?.connected) return socketRef.current;
 
-  const isAuthenticated = Boolean(authUser);
-  const isOnboarded = authUser?.isOnboarded;
+    const socket = io(SERVER_URL, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 5,
+    });
 
-  if (isLoading) return <PageLoader />;
+    socketRef.current = socket;
+    return socket;
+  }, []);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const onConnect = () => setIsSocketConnected(true);
+    const onDisconnect = () => setIsSocketConnected(false);
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || view === VIEWS.ENTRY) return;
+
+    const handleConnected = () => {
+      setIsConnecting(false);
+    };
+
+    const handleWaiting = () => {
+      setView(VIEWS.WAITING);
+      setStatusMessage("Searching for a stranger...");
+      setPartner(null);
+      setStatusBanner("");
+    };
+
+    const handleMatched = ({ partner: matchedPartner }) => {
+      setPartner(matchedPartner);
+      setView(VIEWS.CHAT);
+      setStatusMessage("");
+      setStatusBanner("");
+    };
+
+    const handlePartnerSkipped = () => {
+      setView(VIEWS.WAITING);
+      setStatusMessage("Stranger skipped. Finding someone new...");
+      setPartner(null);
+    };
+
+    const handlePartnerDisconnected = () => {
+      setView(VIEWS.WAITING);
+      setStatusMessage("Stranger disconnected. Finding someone new...");
+      setPartner(null);
+      setStatusBanner("Stranger has disconnected");
+    };
+
+    const handleDisconnected = () => {
+      setView(VIEWS.ENTRY);
+      setPartner(null);
+      setStatusMessage("");
+      setStatusBanner("");
+      setIsConnecting(false);
+    };
+
+    const handleError = ({ message }) => {
+      setStatusMessage(message);
+      setIsConnecting(false);
+    };
+
+    socket.on("connected", handleConnected);
+    socket.on("waiting", handleWaiting);
+    socket.on("matched", handleMatched);
+    socket.on("partner-skipped", handlePartnerSkipped);
+    socket.on("partner-disconnected", handlePartnerDisconnected);
+    socket.on("disconnected", handleDisconnected);
+    socket.on("error", handleError);
+
+    return () => {
+      socket.off("connected", handleConnected);
+      socket.off("waiting", handleWaiting);
+      socket.off("matched", handleMatched);
+      socket.off("partner-skipped", handlePartnerSkipped);
+      socket.off("partner-disconnected", handlePartnerDisconnected);
+      socket.off("disconnected", handleDisconnected);
+      socket.off("error", handleError);
+    };
+  }, [view]);
+
+  const handleStartChat = ({ name, gender }) => {
+    const info = { name, gender };
+    setIsConnecting(true);
+    setStatusMessage("Connecting...");
+
+    const socket = initSocket();
+
+    if (socket.connected) {
+      socket.emit("join", info);
+    } else {
+      socket.once("connect", () => {
+        socket.emit("join", info);
+      });
+    }
+
+    setView(VIEWS.WAITING);
+  };
+
+  const handleNext = () => {
+    socketRef.current?.emit("find-next");
+    setView(VIEWS.WAITING);
+    setStatusMessage("Searching for a stranger...");
+    setStatusBanner("");
+  };
+
+  const handleDisconnect = () => {
+    socketRef.current?.emit("disconnect-chat");
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    setView(VIEWS.ENTRY);
+    setPartner(null);
+    setStatusBanner("");
+  };
+
+  if (view === VIEWS.ENTRY) {
+    return (
+      <EntryForm onSubmit={handleStartChat} isConnecting={isConnecting} />
+    );
+  }
+
+  if (view === VIEWS.WAITING) {
+    return (
+      <WaitingScreen
+        statusMessage={
+          !isSocketConnected
+            ? "Reconnecting..."
+            : statusMessage || "Looking for someone to chat with..."
+        }
+      />
+    );
+  }
 
   return (
-    <div className="h-screen" data-theme={theme}>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            isAuthenticated && isOnboarded ? (
-              <Layout showSidebar={true}>
-                <HomePage />
-              </Layout>
-            ) : (
-              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
-            )
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            !isAuthenticated ? <SignUpPage /> : <Navigate to={isOnboarded ? "/" : "/onboarding"} />
-          }
-        />
-        <Route
-          path="/login"
-          element={
-            !isAuthenticated ? <LoginPage /> : <Navigate to={isOnboarded ? "/" : "/onboarding"} />
-          }
-        />
-        <Route
-          path="/notifications"
-          element={
-            isAuthenticated && isOnboarded ? (
-              <Layout showSidebar={true}>
-                <NotificationsPage />
-              </Layout>
-            ) : (
-              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
-            )
-          }
-        />
-        <Route
-          path="/chat/:id"
-          element={
-            isAuthenticated && isOnboarded ? (
-              <Layout showSidebar={false}>
-                <ChatPage />
-              </Layout>
-            ) : (
-              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
-            )
-          }
-        />
-
-        <Route
-          path="/onboarding"
-          element={
-            isAuthenticated ? (
-              !isOnboarded ? (
-                <OnboardingPage />
-              ) : (
-                <Navigate to="/" />
-              )
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-      </Routes>
-
-      <Toaster />
-    </div>
+    <ChatRoom
+      socket={socketRef.current}
+      partner={partner}
+      onNext={handleNext}
+      onDisconnect={handleDisconnect}
+      statusBanner={statusBanner}
+    />
   );
-};
-export default App;
+}
