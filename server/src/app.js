@@ -3,6 +3,7 @@ const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const { CLIENT_URL } = require("./config/constants");
+const logger = require("./utils/loggers");
 const registerMatchmaking = require("./socketHandlers/matchmaking");
 const registerChat = require("./socketHandlers/chat");
 const registerFileTransfer = require("./socketHandlers/fileTransfer");
@@ -35,7 +36,7 @@ function createServer() {
   };
 
   io.on("connection", (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    logger.success("Client connected", { socketId: socket.id });
 
     registerMatchmaking(io, socket, state);
     registerChat(io, socket, state);

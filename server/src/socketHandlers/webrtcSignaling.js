@@ -1,3 +1,5 @@
+const logger = require("../utils/loggers");
+
 function relayToPartner(io, state, socketId, event, payload) {
   const user = state.users.get(socketId);
   if (!user?.partnerId) return;
@@ -7,6 +9,7 @@ function relayToPartner(io, state, socketId, event, payload) {
 
 module.exports = function registerWebRTCSignaling(io, socket, state) {
   socket.on("call-start", ({ callType }) => {
+    logger.info("Call started", { socketId: socket.id, callType });
     relayToPartner(io, state, socket.id, "incoming-call", {
       callType,
       from: socket.id,
@@ -14,14 +17,17 @@ module.exports = function registerWebRTCSignaling(io, socket, state) {
   });
 
   socket.on("call-accept", ({ callType }) => {
+    logger.success("Call accepted", { socketId: socket.id, callType });
     relayToPartner(io, state, socket.id, "call-accepted", { callType });
   });
 
   socket.on("call-reject", () => {
+    logger.warn("Call rejected", { socketId: socket.id });
     relayToPartner(io, state, socket.id, "call-rejected", {});
   });
 
   socket.on("call-end", () => {
+    logger.info("Call ended", { socketId: socket.id });
     relayToPartner(io, state, socket.id, "call-ended", {});
   });
 

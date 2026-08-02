@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
+const logger = require("../utils/loggers");
 
 function removeFromQueue(state, socketId) {
   state.waitingQueue = state.waitingQueue.filter((id) => id !== socketId);
@@ -75,6 +76,14 @@ function pairUsers(io, state, socketIdA, socketIdB) {
     partner: { name: userA.name, gender: userA.gender },
   });
 
+  logger.success("Users matched", {
+    roomId,
+    users: [
+      { socketId: socketIdA, name: userA.name },
+      { socketId: socketIdB, name: userB.name },
+    ],
+  });
+
   return true;
 }
 
@@ -129,9 +138,16 @@ function handleDisconnect(io, state, socketId) {
 module.exports = function registerMatchmaking(io, socket, state) {
   socket.on("join", ({ name, gender }) => {
     if (!name?.trim() || !gender) {
+      logger.warn("Join rejected: missing name or gender", { socketId: socket.id });
       socket.emit("error", { message: "Name and gender are required" });
       return;
     }
+
+    logger.success("User joined queue", {
+      socketId: socket.id,
+      name: name.trim(),
+      gender,
+    });
 
     state.users.set(socket.id, {
       socketId: socket.id,
@@ -150,6 +166,8 @@ module.exports = function registerMatchmaking(io, socket, state) {
     const user = state.users.get(socket.id);
     if (!user) return;
 
+    logger.info("User skipped partner", { socketId: socket.id, name: user.name });
+
     const partnerId = user.partnerId;
     if (partnerId) {
       notifyPartner(io, state, socket.id, "partner-skipped", {
@@ -163,6 +181,9 @@ module.exports = function registerMatchmaking(io, socket, state) {
   });
 
   socket.on("disconnect-chat", () => {
+    const user = state.users.get(socket.id);
+    logger.info("User left chat", { socketId: socket.id, name: user?.name });
+
     const partnerId = unpairUser(state, socket.id);
     removeFromQueue(state, socket.id);
 
@@ -173,16 +194,17 @@ module.exports = function registerMatchmaking(io, socket, state) {
       addToQueue(io, state, partnerId);
     }
 
-    const user = state.users.get(socket.id);
-    if (user) {
-      user.status = "idle";
+    const activeUser = state.users.get(socket.id);
+    if (activeUser) {
+      activeUser.status = "idle";
     }
 
     socket.emit("disconnected");
   });
 
   socket.on("disconnect", () => {
-    console.log(`Client disconnected: ${socket.id}`);
+    const user = state.users.get(socket.id);
+    logger.info("Client disconnected", { socketId: socket.id, name: user?.name });
     handleDisconnect(io, state, socket.id);
   });
 };
